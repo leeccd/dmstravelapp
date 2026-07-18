@@ -5,11 +5,11 @@ from supabase import create_client, Client
 # Configure Mobile Responsiveness & Viewport
 st.set_page_config(page_title="Trip Hub", layout="centered")
 
-# Initialize Supabase Connection
 @st.cache_resource
 def init_supabase() -> Client:
-    url = st.secrets["https://vdoyjmfadgcphplvquvg.supabase.co"]
-    key = st.secrets["sb_publishable_2gJlsMkASfpdNd0MvxMbhw_A60EDhha"]
+    # Do not paste your actual URL or Key here. Leave these strings exactly as written.
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
 
 supabase = init_supabase()
