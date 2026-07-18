@@ -2,80 +2,95 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 
-# Configure Mobile Responsiveness & Viewport
 st.set_page_config(page_title="Trip Hub", layout="centered")
 
 @st.cache_resource
 def init_supabase() -> Client:
-    # Do not paste your actual URL or Key here. Leave these strings exactly as written.
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 supabase = init_supabase()
 
-# App Header & Countdown
-st.title("🇨🇳 Rail & River Odyssey")
-st.caption("Group Itinerary & Shared Expense Hub")
+st.title("🇨🇳 Global Travel Sync")
+st.caption("Multi-City, Multi-Trip Planner & Shared Expenses")
 
-# Multi-Trip Switcher Setup
-trips_data = supabase.table("master_trips").select("*").execute()
-trips_df = pd.DataFrame(trips_data.data)
-selected_trip = st.selectbox("Select Active Journey:", trips_df['trip_name'])
-trip_id = trips_df[trips_df['trip_name'] == selected_trip]['trip_id'].values[0]
+# 1. Fetch Active Journeys
+trips_db = supabase.table("master_trips").select("*").execute()
+if trips_db.data:
+    trips_df = pd.DataFrame(trips_db.data)
+    trip_map = dict(zip(trips_df['trip_name'], trips_df['trip_id']))
+    selected_trip_name = st.selectbox("Active Journey:", options=list(trip_map.keys()))
+    trip_id = trip_map[selected_trip_name]
+else:
+    st.error("Please run the Supabase database script first.")
+    st.stop()
 
-# Bottom Navigation Bar Emulator (Excellent for Mobile)
-tab1, tab2, tab3 = st.tabs(["🗺️ Plan", "💰 Money", "➕ Log Cost"])
+# Mobile UI Bottom-Navigation Emulation
+t_itin, t_spend, t_log, t_pack, t_vlog = st.tabs(["🗺️ Plan", "📊 Money", "💸 Log", "🎒 Pack", "🎬 Vlog"])
 
-with tab1:
-    st.subheader("Daily Itinerary")
-    itin_data = supabase.table("daily_itinerary").select("*").eq("trip_id", trip_id).order("date").execute()
-    if itin_data.data:
-        itin_df = pd.DataFrame(itin_data.data)
-        for _, row in itin_df.iterrows():
-            with st.expander(f"📅 {row['date']} - {row['city_cluster']}"):
-                st.markdown(f"**⏰ Time:** {row['time_label']}")
-                st.markdown(f"**📍 Location:** {row['location_name']}")
-                st.markdown(f"**📝 Details:** {row['notes']}")
+# TAB 1: ITINERARY VIEW
+with t_itin:
+    st.subheader("Daily Schedule")
+    itin_db = supabase.table("daily_itinerary").select("*").eq("trip_id", trip_id).order("date").execute()
+    if itin_db.data:
+        for item in itin_db.data:
+            with st.expander(f"Day {item['day_number']} | {item['city_cluster']} ({item['date']})"):
+                st.markdown(f"**⏰ Time:** {item['time_label']}")
+                st.markdown(f"**📍 Location:** {item['location_name']}")
+                st.info(f"📋 {item['notes']}")
     else:
-        st.info("No itinerary slots generated yet.")
+        st.info("No schedule entries loaded for this journey.")
 
-with tab2:
-    st.subheader("Trip Balances")
-    exp_data = supabase.table("expense_tracker").select("*").eq("trip_id", trip_id).execute()
-    if exp_data.data:
-        df = pd.DataFrame(exp_data.data)
+# TAB 2: SPEND & SETTLEMENT ENGINE
+with t_spend:
+    st.subheader("Group Balances")
+    exp_db = supabase.table("expense_tracker").select("*").eq("trip_id", trip_id).execute()
+    if exp_db.data:
+        df = pd.DataFrame(exp_db.data)
         st.dataframe(df[['item', 'paid_by', 'local_amount', 'home_amount_aud']], use_container_width=True)
-        
-        # Simple breakdown logic display
-        total_spent = df['home_amount_aud'].sum()
-        st.metric("Total Shared Group Spend (AUD)", f"${total_spent:,.2f}")
+        st.metric("Total Shared Group Spend", f"${df['home_amount_aud'].sum():,.2f} AUD")
     else:
-        st.info("No expenses logged yet.")
+        st.info("Clean ledger! No expenses found.")
 
-with tab3:
-    st.subheader("Log a New Group Expense")
+# TAB 3: DYNAMIC BILL LOGGER
+with t_log:
+    st.subheader("Log an Expense")
     friends = ["Alice", "Bob", "Charlie", "David", "Emma", "Frank", "Grace", "Henry", "Ivy", "Jack"]
     
-    with st.form("expense_form", clear_on_submit=True):
-        item = st.text_input("What did you buy?", placeholder="e.g., Chongqing Hotpot")
-        payer = st.selectbox("Who paid?", options=friends)
-        local_amt = st.number_input("Local Currency Amount (RMB)", min_value=0.0, step=1.0)
-        ex_rate = st.number_input("Effective Exchange Rate (AUD/RMB)", min_value=0.01, value=4.6200, format="%.4f")
+    with st.form("spend_form", clear_on_submit=True):
+        item_title = st.text_input("Item Description:", placeholder="e.g., Luoyang Water Banquet")
+        payer = st.selectbox("Paid By:", options=friends)
+        amt_local = st.number_input("Local Amount (Foreign Currency):", min_value=0.0, step=5.0)
+        ex_rate = st.number_input("Exchange Rate (Amount local per 1 AUD):", min_value=0.01, value=4.6200, format="%.4f")
+        split_with = st.multiselect("Split cleanly between:", options=friends, default=friends)
         
-        st.caption("Who splits this?")
-        who_owes = st.multiselect("Select participants:", options=friends, default=friends)
-        
-        submitted = st.form_submit_button("Submit Transaction to Cloud")
-        if submitted and item and local_amt > 0:
-            payload = {
-                "trip_id": trip_id,
-                "item": item,
-                "paid_by": payer,
-                "local_amount": local_amt,
-                "exchange_rate": ex_rate,
-                "who_owes": who_owes,
-                "split_type": "Equal" if len(who_owes) == len(friends) else "Specific"
-            }
-            supabase.table("expense_tracker").insert(payload).execute()
-            st.success("Logged successfully! Pull down page to refresh.")
+        if st.form_submit_button("Publish Ledger Record"):
+            if item_title and amt_local > 0:
+                supabase.table("expense_tracker").insert({
+                    "trip_id": trip_id, "item": item_title, "paid_by": payer,
+                    "local_amount": amt_local, "exchange_rate": ex_rate, "who_owes": split_with,
+                    "split_type": "Equal" if len(split_with) == len(friends) else "Specific"
+                }).execute()
+                st.success("Transaction written to Supabase! Refreshing...")
+                st.rerun()
+
+# TAB 4: CLIMATE-AWARE PACKING
+with t_pack:
+    st.subheader("Group Packing Checklist")
+    pack_db = supabase.table("packing_checklist").select("*").eq("trip_id", trip_id).execute()
+    if pack_db.data:
+        for idx, pc in enumerate(pack_db.data):
+            status = st.checkbox(f"{pc['item']} ({pc['climate_tag']}) — [{pc['assigned_to']}]", value=pc['is_packed'], key=f"pack_{idx}")
+            if status != pc['is_packed']:
+                supabase.table("packing_checklist").update({"is_packed": status}).eq("id", pc['id']).execute()
+    else:
+        st.info("No bags packed yet.")
+
+# TAB 5: VLOG PRODUCTION PLANNER
+with t_vlog:
+    st.subheader("Vlog Scene Production Tracker")
+    vlog_db = supabase.table("vlog_tracker").select("*").eq("trip_id", trip_id).execute()
+    if vlog_db.data:
+        v_df = pd.DataFrame(vlog_db.data)
+        st.dataframe(v_df[['city_cluster', 'scene_description', 'shot_type', 'status']], use_container_width=True)
+    else:
+        st.info("No scheduled scenes recorded.")
