@@ -16,7 +16,6 @@ if is_admin:
 else:
     # Your friends only see these three view-only tabs
     t_itin, t_spend, t_pack = st.tabs(["🗺️ Plan", "📊 Money", "🎒 Pack"])
-    
 # Configure clean, accessible page parameters
 st.set_page_config(page_title="China Travel Hub", layout="centered", initial_sidebar_state="collapsed")
 
