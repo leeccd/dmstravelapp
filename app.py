@@ -3,19 +3,6 @@ import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
 
-# At the top of your app, check the browser URL parameters
-query_params = st.query_params
-
-# If you visit the app via: https://your-app.streamlit.app/?role=admin
-is_admin = query_params.get("role") == "admin"
-
-# Mobile UI Navigation Tabs
-if is_admin:
-    # Admin gets all tabs including editing controls
-    t_itin, t_spend, t_log, t_pack, t_vlog = st.tabs(["🗺️ Plan", "📊 Money", "💸 Log", "🎒 Pack", "🎬 Vlog"])
-else:
-    # Your friends only see these three view-only tabs
-    t_itin, t_spend, t_pack = st.tabs(["🗺️ Plan", "📊 Money", "🎒 Pack"])
 # Configure clean, accessible page parameters
 st.set_page_config(page_title="China Travel Hub", layout="centered", initial_sidebar_state="collapsed")
 
