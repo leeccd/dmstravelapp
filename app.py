@@ -8,8 +8,8 @@ st.set_page_config(page_title="Trip Hub", layout="centered")
 # Initialize Supabase Connection
 @st.cache_resource
 def init_supabase() -> Client:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
+    url = st.secrets["https://vdoyjmfadgcphplvquvg.supabase.co"]
+    key = st.secrets["sb_publishable_2gJlsMkASfpdNd0MvxMbhw_A60EDhha"]
     return create_client(url, key)
 
 supabase = init_supabase()
