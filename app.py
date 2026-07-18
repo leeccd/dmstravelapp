@@ -3,8 +3,12 @@ import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
 
-# Configure clean, accessible page parameters
-st.set_page_config(page_title="China Travel Hub", layout="centered", initial_sidebar_state="collapsed")
+# Forces the canvas container to adapt natively to mobile display parameters
+st.set_page_config(
+    page_title="Trip Hub", 
+    layout="centered", 
+    initial_sidebar_state="collapsed"
+)
 
 # Custom CSS injection to heavily scale up mobile font sizes and touch targets
 st.markdown("""
