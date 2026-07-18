@@ -3,132 +3,140 @@ import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
 
-st.set_page_config(page_title="Trip Hub", layout="centered")
+# At the top of your app, check the browser URL parameters
+query_params = st.query_params
+
+# If you visit the app via: https://your-app.streamlit.app/?role=admin
+is_admin = query_params.get("role") == "admin"
+
+# Mobile UI Navigation Tabs
+if is_admin:
+    # Admin gets all tabs including editing controls
+    t_itin, t_spend, t_log, t_pack, t_vlog = st.tabs(["🗺️ Plan", "📊 Money", "💸 Log", "🎒 Pack", "🎬 Vlog"])
+else:
+    # Your friends only see these three view-only tabs
+    t_itin, t_spend, t_pack = st.tabs(["🗺️ Plan", "📊 Money", "🎒 Pack"])
+    
+# Configure clean, accessible page parameters
+st.set_page_config(page_title="China Travel Hub", layout="centered", initial_sidebar_state="collapsed")
+
+# Custom CSS injection to heavily scale up mobile font sizes and touch targets
+st.markdown("""
+    <style>
+        /* Scale up text globally */
+        html, body, [class*="css"] {
+            font-size: 19px !important;
+        }
+        /* Make form buttons and tabs larger for easier tapping */
+        .stButton button {
+            width: 100% !important;
+            height: 60px !important;
+            font-size: 22px !important;
+            font-weight: bold !important;
+            border-radius: 12px !important;
+        }
+        /* Style Chinese text boxes for maximum visibility */
+        .chinese-card {
+            background-color: #FFF9E6;
+            border: 3px solid #FFA500;
+            padding: 20px;
+            border-radius: 15px;
+            color: #000000;
+        }
+    </style>
+""", unsafe_allow_input=True)
 
 @st.cache_resource
 def init_supabase() -> Client:
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 supabase = init_supabase()
-
-# Define the logical city sequence for the 28-day itinerary
-CITY_SEQUENCE = ["Beijing", "Luoyang", "Xi'an", "Chongqing", "Yangtze Cruise", "Chengdu"]
 ACTIVE_TRIP_ID = "CHINA2027"
 
-st.title("🇨🇳 Global Travel Sync")
-st.caption("Context-Aware Multi-City Dynamic Planner")
+# --- HUGE ACCESSIBLE HEADER ---
+st.markdown("# 🇨🇳 FAMILY TRAVEL GUIDE")
+st.markdown("### Tap your current city below to see today's plan:")
 
-# ==========================================
-# CRITICAL COMPONENT: THE GLOBAL CITY FILTER
-# ==========================================
-# This acts as the single source of truth for the rest of the UI tabs
-selected_city = st.selectbox(
-    "📍 Select Current Location Hub:", 
-    options=CITY_SEQUENCE,
-    index=0
-)
+# --- SENIOR FRIENDLY CITY SELECTOR (GIANT BUTTONS) ---
+# Instead of a small dropdown, use big buttons that set a session state variable
+if "active_city" not in st.session_state:
+    st.session_state.active_city = "Beijing"
 
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("🔴 BEIJING"): st.session_state.active_city = "Beijing"
+    if st.button("🧱 LUOYANG"): st.session_state.active_city = "Luoyang"
+    if st.button("🗿 XI'AN"): st.session_state.active_city = "Xi'an"
+with col2:
+    if st.button("🌶️ CHONGQING"): st.session_state.active_city = "Chongqing"
+    if st.button("🚢 YANGTZE CRUISE"): st.session_state.active_city = "Yangtze Cruise"
+    if st.button("🐼 CHENGDU"): st.session_state.active_city = "Chengdu"
+
+current_city = st.session_state.active_city
+
+st.markdown(f"## 📍 Currently Showing: {current_city.upper()}")
 st.markdown("---")
 
-# Mobile UI Navigation Tabs
-t_itin, t_stay, t_vlog = st.tabs(["🗺️ Isolate Plan", "🏨 Hotel Log", "🎬 Vlog Checklist"])
+# Simple, intuitive view selector
+view_mode = st.radio("What do you want to see?", ["🗺️ Today's Schedule", "🏨 Hotel & Train Tickets"], horizontal=True)
 
 # ------------------------------------------
-# TAB 1: DYNAMIC DAILY ITINERARY VIEW
+# SCHEDULE VIEW
 # ------------------------------------------
-with t_itin:
-    st.subheader(f"Schedule: {selected_city}")
-    
-    # Query Supabase for slots explicitly tied to the selected city context
+if view_mode == "🗺️ Today's Schedule":
     itin_db = (
         supabase.table("daily_itinerary")
         .select("*")
         .eq("trip_id", ACTIVE_TRIP_ID)
-        .eq("city_cluster", selected_city)
+        .eq("city_cluster", current_city)
         .order("date")
         .execute()
     )
     
     if itin_db.data:
-        for idx, item in enumerate(itin_db.data):
-            # Parse friendly date structure
-            parsed_date = datetime.strptime(item['date'], "%Y-%m-%d").strftime("%b %d")
+        for item in itin_db.data:
+            parsed_date = datetime.strptime(item['date'], "%Y-%m-%d").strftime("%B %d")
             
-            with st.expander(f"Day {item['day_number']} | {parsed_date} ({item['time_label']})"):
-                st.markdown(f"**⚡ Activity:** {item['activity']}")
+            # Render clean, open cards instead of nested accordion toggles
+            with st.container(border=True):
+                st.markdown(f"## 📅 {parsed_date}")
+                st.markdown(f"**⏰ Time:** {item['time_label']}")
+                st.markdown(f"**🎯 What We Are Doing:**\n# {item['activity']}")
                 if item['location_name']:
-                    st.markdown(f"**📍 Target Location:** `{item['location_name']}`")
+                    st.markdown(f"**📍 Place:** `{item['location_name']}`")
                 if item['notes']:
-                    st.info(f"📝 **Notes:** {item['notes']}")
+                    st.markdown(f"ℹ️ *Tip: {item['notes']}*")
     else:
-        st.info(f"No itinerary items scheduled under the {selected_city} cluster.")
+        st.info(f"No events scheduled for {current_city} yet.")
 
 # ------------------------------------------
-# TAB 2: DYNAMIC CONTEXT-AWARE STAY & TRANSIT LOG
+# HOTEL & TRANSIT VIEW (CRITICAL FOR TAXIS)
 # ------------------------------------------
-with t_stay:
-    st.subheader(f"Bookings & Transit in {selected_city}")
-    
-    # Query for flights, trains, cruises, or hotels matching this specific city cluster
+else:
     bookings_db = (
         supabase.table("bookings_log")
         .select("*")
         .eq("trip_id", ACTIVE_TRIP_ID)
-        .eq("city_cluster", selected_city)
-        .order("date_time")
+        .eq("city_cluster", current_city)
         .execute()
     )
     
     if bookings_db.data:
         for booking in bookings_db.data:
-            b_time = datetime.fromisoformat(booking['date_time'].replace('Z', '+00:00')).strftime("%Y-%m-%d %H:%M") if booking['date_time'] else "N/A"
-            
             with st.container(border=True):
-                st.markdown(f"### {booking['booking_type']} • {booking['provider']}")
-                st.markdown(f"**📅 Schedule/Check-in:** `{b_time}`")
+                st.markdown(f"## {booking['booking_type']} Details")
+                st.markdown(f"**Company/Provider:** {booking['provider']}")
                 if booking['reference_code']:
-                    st.markdown(f"**Confirmation Code:** `{booking['reference_code']}`")
+                    st.markdown(f"**Confirmation Code (Show to Agent):**\n# `{booking['reference_code']}`")
+                
+                # Big card configuration for showing to Chinese drivers
                 if booking['address_chinese']:
-                    st.warning(f"🇨🇳 **Local Address (For Taxi):** {booking['address_chinese']}")
+                    st.markdown("### 🚖 SHOW THIS TO THE TAXI DRIVER:")
+                    st.markdown(
+                        f'<div class="chinese-card"><h1>{booking["address_chinese"]}</h1></div>', 
+                        unsafe_allow_input=True
+                    )
                 if booking['emergency_contact']:
-                    st.markdown(f"📞 **Contact:** {booking['emergency_contact']}")
+                    st.markdown(f"📞 **Phone Number:** {booking['emergency_contact']}")
     else:
-        st.info(f"No explicit booking items linked to {selected_city} found.")
-
-# ------------------------------------------
-# TAB 3: DYNAMIC VLOG PRODUCTION PLANNER
-# ------------------------------------------
-with t_vlog:
-    st.subheader(f"Shot List Context: {selected_city}")
-    
-    # Query shot list isolated exclusively to the locations you are moving through today
-    vlog_db = (
-        supabase.table("vlog_tracker")
-        .select("*")
-        .eq("trip_id", ACTIVE_TRIP_ID)
-        .eq("city_cluster", selected_city)
-        .execute()
-    )
-    
-    if vlog_db.data:
-        v_df = pd.DataFrame(vlog_db.data)
-        
-        # Interactive status updates directly on the data view layout
-        for idx, shot in v_df.iterrows():
-            with st.container(border=True):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.markdown(f"**{shot['shot_type']}** - {shot['scene_description']}")
-                with col2:
-                    # Dynamically check off state live to the cloud database
-                    current_status = shot['status']
-                    is_captured = current_status == "Captured"
-                    
-                    action = st.checkbox("Captured", value=is_captured, key=f"vlog_chk_{shot['id']}")
-                    new_status = "Captured" if action else "To Film"
-                    
-                    if new_status != current_status:
-                        supabase.table("vlog_tracker").update({"status": new_status}).eq("id", int(shot['id'])).execute()
-                        st.rerun()
-    else:
-        st.info(f"No custom vlog scripts mapped for {selected_city} yet.")
+        st.info(f"No booking tickets logged for {current_city}.")
